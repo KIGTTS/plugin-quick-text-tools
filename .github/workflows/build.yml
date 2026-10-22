@@ -21,6 +21,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
       - run: chmod +x gradlew
       - run: ./gradlew testDebugUnitTest assembleDebug collectPluginDependencies --console=plain
+      - run: node tools/Test-Calculator.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
