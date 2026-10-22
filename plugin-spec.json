@@ -1,0 +1,12 @@
+{
+  "id": "tools.quick-text-example",
+  "name": "快捷文本工具示例",
+  "version": "0.8.0",
+  "versionCode": 8,
+  "entryClass": "com.kigtts.tools.quicktext.QuickTextToolsPlugin",
+  "apiVersion": 9,
+  "minSdk": 26,
+  "runtime": "android-dex",
+  "license": "MIT",
+  "capabilities": ["ui", "quick-text-read", "quick-text-write"]
+}

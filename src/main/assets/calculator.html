@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>计算器</title><style>
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;font-family:system-ui,sans-serif;color:#172e2f;background:#e8f3f3}
+main{padding:16px;max-width:640px;margin:auto}
+h1{font-size:20px}output{display:block;min-height:80px;padding:16px;background:#d6e7e7;border-radius:20px;font-size:36px;text-align:right;overflow-wrap:anywhere}
+.keys{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:12px}button{border:0;border-radius:24px;padding:14px 8px;font-size:20px;background:#c2dfdf;color:#173b3c;transition:border-radius .12s,transform .12s}button:active{border-radius:8px;transform:scale(.95)}button.op{background:#00696e;color:white}.send{width:100%;margin-top:12px;font-size:16px}
+@media(prefers-color-scheme:dark){html,body{background:#102021;color:#e2eeee}output{background:#243a3c}.keys button,.send{background:#304b4e;color:#e2eeee}.keys .op{background:#66d8df;color:#00383b}}
+</style></head><body><main><h1>计算器</h1><output id="display" aria-live="polite">0</output><div class="keys" id="keys"></div>
+<button class="send" id="send">将结果显示为字幕</button></main><script>
+let current='0',previous=null,operation=null,fresh=false;const display=document.getElementById('display');
+function render(){display.textContent=current}function calculate(){if(previous===null||!operation)return;const a=previous,b=Number(current);let value;
+switch(operation){case '+':value=a+b;break;case '−':value=a-b;break;case '×':value=a*b;break;case '÷':value=b===0?NaN:a/b;break}
+current=Number.isFinite(value)?String(Math.round(value*1e10)/1e10):'无法计算';previous=null;operation=null;fresh=true}
+for(const key of ['C','⌫','%','÷','7','8','9','×','4','5','6','−','1','2','3','+','±','0','.','=']){const button=document.createElement('button');button.textContent=key;if(['÷','×','−','+','='].includes(key))button.className='op';
+button.onclick=()=>{if(key==='C'){current='0';previous=null;operation=null;fresh=false}else if(key==='⌫'){current=current.slice(0,-1)||'0'}else if(key==='±'){current=String(-Number(current))}else if(key==='%'){current=String(Number(current)/100)}
+else if(key==='='){calculate()}else if(['÷','×','−','+'].includes(key)){calculate();previous=Number(current);operation=key;fresh=true}else{if(fresh||!Number.isFinite(Number(current))){current='0';fresh=false}if(key==='.'&&!current.includes('.'))current+='.';else if(key!=='.')current=current==='0'?key:current+key;current=current.slice(0,20)}render()};document.getElementById('keys').append(button)}
+document.getElementById('send').onclick=()=>{if(window.Kigtts)Kigtts.postMessage(JSON.stringify({action:'calculator/result',inputs:{result:current}}))};
+</script></body></html>
