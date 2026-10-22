@@ -6,13 +6,13 @@ import java.util.UUID
 
 /** Optional SDK example, never linked into the host or installed automatically. */
 class QuickTextToolsPlugin:KigPlugin {
-    override val descriptor=PluginDescriptor("tools.quick-text-example","快捷文本工具示例","创建计算器页面卡片并演示导入导出",version="0.8.0")
+    override val descriptor=PluginDescriptor("tools.quick-text-example","快捷文本工具示例","创建计算器页面卡片并演示导入导出",version="0.8.1")
     private lateinit var environment:PluginEnvironment
     private val broker get()=requireNotNull(environment.quickTextBroker) {"宿主不支持快捷文本接口"}
     override suspend fun attach(environment:PluginEnvironment) {this.environment=environment}
     override val contributions=PluginContributions(drawerEntries=listOf(DrawerEntry("quick-tools","快捷文本工具","tools",PluginIcon.TEXT)))
     override fun page(pageId:String,context:PluginContext)=if(pageId=="tools")PluginPage("tools","快捷文本工具",listOf(
-        PageBlock.Text("示例插件：创建可交互的计算器，或导入导出快捷条目。资源保存在本插件数据目录。"),
+        PageBlock.Text("创建计算器快捷卡片，或导入、导出常用快捷文本。"),
         PageBlock.Actions(listOf(PageAction("create-calculator","创建计算器",PluginIcon.ADD),PageAction("export","导出快捷文本",PluginIcon.EXPORT),
             PageAction("import","导入快捷文本",PluginIcon.MENU)))
     )) else null
