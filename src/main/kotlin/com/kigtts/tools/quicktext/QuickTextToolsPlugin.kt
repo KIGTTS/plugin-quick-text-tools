@@ -6,7 +6,7 @@ import java.util.UUID
 
 /** Optional SDK example, never linked into the host or installed automatically. */
 class QuickTextToolsPlugin:KigPlugin {
-    override val descriptor=PluginDescriptor("tools.quick-text-example","快捷文本工具示例","创建计算器页面卡片并演示导入导出",version="0.8.1")
+    override val descriptor=PluginDescriptor("tools.quick-text-example","快捷文本工具示例","创建计算器页面卡片并演示导入导出",version="0.8.2")
     private lateinit var environment:PluginEnvironment
     private val broker get()=requireNotNull(environment.quickTextBroker) {"宿主不支持快捷文本接口"}
     override suspend fun attach(environment:PluginEnvironment) {this.environment=environment}

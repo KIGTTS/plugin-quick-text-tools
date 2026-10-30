@@ -1,10 +1,10 @@
 {
   "id": "tools.quick-text-example",
   "name": "快捷文本工具示例",
-  "version": "0.8.1",
-  "versionCode": 9,
+  "version": "0.8.2",
+  "versionCode": 10,
   "entryClass": "com.kigtts.tools.quicktext.QuickTextToolsPlugin",
-  "apiVersion": 9,
+  "apiVersion": 14,
   "minSdk": 26,
   "runtime": "android-dex",
   "license": "MIT",
@@ -12,5 +12,9 @@
     "ui",
     "quick-text-read",
     "quick-text-write"
-  ]
+  ],
+  "permissionPurposes": {
+    "quick-text-read": "读取快捷文本和分组，用于导出备份及确定导入位置。",
+    "quick-text-write": "添加计算器网页卡片，或导入你选择的快捷文本备份。"
+  }
 }
