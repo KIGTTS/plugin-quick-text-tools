@@ -1,54 +1,124 @@
 package com.kigtts.tools.quicktext
 
+import android.text.TextUtils
 import com.kigtts.plugin.api.*
+import kotlinx.coroutines.CancellationException
 import java.io.File
+import java.util.Locale
 import java.util.UUID
 
-/** Optional SDK example, never linked into the host or installed automatically. */
-class QuickTextToolsPlugin:KigPlugin {
-    override val descriptor=PluginDescriptor("tools.quick-text-example","快捷文本工具示例","创建计算器页面卡片并演示导入导出",version="0.8.2")
-    private lateinit var environment:PluginEnvironment
-    private val broker get()=requireNotNull(environment.quickTextBroker) {"宿主不支持快捷文本接口"}
-    override suspend fun attach(environment:PluginEnvironment) {this.environment=environment}
-    override val contributions=PluginContributions(drawerEntries=listOf(DrawerEntry("quick-tools","快捷文本工具","tools",PluginIcon.TEXT)))
-    override fun page(pageId:String,context:PluginContext)=if(pageId=="tools")PluginPage("tools","快捷文本工具",listOf(
-        PageBlock.Text("创建计算器快捷卡片，或导入、导出常用快捷文本。"),
-        PageBlock.Actions(listOf(PageAction("create-calculator","创建计算器",PluginIcon.ADD),PageAction("export","导出快捷文本",PluginIcon.EXPORT),
-            PageAction("import","导入快捷文本",PluginIcon.MENU)))
-    )) else null
-    override suspend fun execute(actionId:String,context:PluginContext):PluginOutcome {
-        return when(actionId) {
-            "create-calculator"->{
-                val snapshot=query();val group=snapshot.groups.firstOrNull {it.name=="小工具"} ?: QuickGroup(name="小工具",icon="INFO")
-                val path="resources/widgets/"+UUID.randomUUID()
-                val file=environment.storage.file("$path/index.html");file.parentFile!!.mkdirs()
-                File(environment.assets,"calculator.html").inputStream().use {input->file.outputStream().use {input.copyTo(it)}}
-                val media=(broker.request(QuickTextCommand.PublishPage(PluginResource(path),name="计算器",allowedActions=listOf("calculator/result"))) as? QuickTextReply.Media)
-                    ?: return PluginOutcome.Message("页面创建失败")
-                val edits=mutableListOf<QuickTextEdit>();if(group !in snapshot.groups)edits+=QuickTextEdit.PutGroup(group)
-                edits+=QuickTextEdit.PutEntry(QuickEntry(groupId=group.id,text="计算器",title="计算器",kind=QuickCardKind.PAGE,mediaId=media.value.id,
-                    metadata=mapOf("${descriptor.id}/widget" to "calculator")))
-                commit(QuickTextCommand.Prepare(UUID.randomUUID().toString(),snapshot.revision,edits))
+/** Optional SDK example, installed separately from the host. */
+class QuickTextToolsPlugin : KigPlugin {
+    override val descriptor = PluginDescriptor("tools.quick-text-example", "快捷文本工具示例", "创建计算器页面卡片并演示导入导出", version = "0.8.3")
+    override val localization = PluginLocalization("zh-CN", listOf("zh-CN", "zh-CN-x-casual", "en", "ko", "ja"))
+    private val widgetKey = "${descriptor.id}/widget"
+    private lateinit var environment: PluginEnvironment
+    private var strings = PluginStrings(emptyMap())
+
+    override suspend fun attach(environment: PluginEnvironment) {
+        this.environment = environment
+        strings = PluginStrings.fromAssets(environment.assets)
+    }
+
+    override val contributions = PluginContributions(drawerEntries = listOf(DrawerEntry("quick-tools", "快捷文本工具", "tools", PluginIcon.TEXT)))
+    override fun contributions(context: PluginContext) = PluginContributions(drawerEntries = listOf(
+        DrawerEntry("quick-tools", strings.text("title", context.locale), "tools", PluginIcon.TEXT)
+    ))
+
+    override fun page(pageId: String, context: PluginContext): PluginPage? {
+        if (pageId != "tools") return null
+        fun text(key: String) = strings.text(key, context.locale)
+        return PluginPage("tools", text("title"), listOf(
+            PageBlock.Text(text("description")),
+            PageBlock.Actions(listOf(
+                PageAction("create-calculator", text("calculator.create"), PluginIcon.ADD),
+                PageAction("export", text("export"), PluginIcon.EXPORT),
+                PageAction("import", text("import"), PluginIcon.MENU)
+            ))
+        ))
+    }
+
+    override suspend fun execute(actionId: String, context: PluginContext): PluginOutcome {
+        fun text(key: String) = strings.text(key, context.locale)
+        if (actionId == "calculator/result") return PluginOutcome.ReplaceEditorText(context.inputs["result"].orEmpty().take(256))
+        if (actionId == "import") return PluginOutcome.ImportResource(text("import"), "imports", "import-complete")
+        val broker = environment.quickTextBroker ?: return PluginOutcome.Message(text("error.host_unavailable"))
+        return try {
+            when (actionId) {
+                "create-calculator" -> createCalculator(broker, context.locale, ::text)
+                "export" -> when (val reply = broker.request(QuickTextCommand.Export())) {
+                    is QuickTextReply.Resource -> PluginOutcome.ExportResource(text("export"), reply.source, "${text("export.file")}.kigcards")
+                    else -> message(reply, ::text)
+                }
+                "import-complete" -> {
+                    val path = context.inputs["resourcePath"] ?: return PluginOutcome.Message(text("import.missing"))
+                    val snapshot = query(broker) ?: return PluginOutcome.Message(text("error.read"))
+                    apply(broker, broker.request(QuickTextCommand.Import(PluginResource(path), UUID.randomUUID().toString(), snapshot.revision)), ::text)
+                }
+                else -> PluginOutcome.Message(text("error.unknown"))
             }
-            "calculator/result"->PluginOutcome.ReplaceEditorText(context.inputs["result"].orEmpty().take(256))
-            "export"->{val result=broker.request(QuickTextCommand.Export())
-                if(result is QuickTextReply.Resource)PluginOutcome.ExportResource("导出快捷文本",result.source,"快捷文本.kigcards") else message(result)}
-            "import"->PluginOutcome.ImportResource("导入快捷文本","imports","import-complete")
-            "import-complete"->{val resource=context.inputs["resourcePath"] ?: return PluginOutcome.Message("未选择导入包")
-                val result=broker.request(QuickTextCommand.Import(PluginResource(resource),UUID.randomUUID().toString(),query().revision))
-                if(result is QuickTextReply.Prepared)apply(result) else message(result)}
-            else->PluginOutcome.Message("未知操作")
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            PluginOutcome.Message(text("error.operation"))
         }
     }
-    private suspend fun query()=(broker.request(QuickTextCommand.Query(limit=0)) as? QuickTextReply.Snapshot)?.value ?: error("无法读取快捷文本")
-    private suspend fun commit(command:QuickTextCommand.Prepare):PluginOutcome {
-        val result=broker.request(command);return if(result is QuickTextReply.Prepared)apply(result) else message(result)
+
+    private suspend fun createCalculator(broker: QuickTextBroker, locale: String, text: (String) -> String): PluginOutcome {
+        val snapshot = query(broker) ?: return PluginOutcome.Message(text("error.read"))
+        val existingGroups = snapshot.entries.filter { it.metadata[widgetKey] == "calculator" }.map { it.groupId }.toSet()
+        val groupNames = localization.supportedLocales.map { strings.text("calculator.group", it) }
+        val group = snapshot.groups.firstOrNull { it.id in existingGroups }
+            ?: snapshot.groups.firstOrNull { it.name in groupNames }
+            ?: QuickGroup(name = text("calculator.group"), icon = "INFO")
+        val path = "resources/widgets/${UUID.randomUUID()}"
+        val title = text("calculator.title")
+        val html = File(environment.assets, "calculator.html").readText(Charsets.UTF_8)
+            .replace("{{language}}", Locale.forLanguageTag(locale).toLanguageTag())
+            .replace("{{title}}", TextUtils.htmlEncode(title))
+            .replace("{{send}}", TextUtils.htmlEncode(text("calculator.send")))
+            .replace("{{error}}", TextUtils.htmlEncode(text("calculator.error")))
+        val file = environment.storage.file("$path/index.html")
+        file.parentFile?.mkdirs()
+        file.writeText(html, Charsets.UTF_8)
+
+        val reply = broker.request(QuickTextCommand.PublishPage(PluginResource(path), name = title, allowedActions = listOf("calculator/result")))
+        if (reply !is QuickTextReply.Media) return message(reply, text)
+        val edits = buildList {
+            if (group !in snapshot.groups) add(QuickTextEdit.PutGroup(group))
+            add(QuickTextEdit.PutEntry(QuickEntry(groupId = group.id, text = title, title = title, kind = QuickCardKind.PAGE,
+                mediaId = reply.value.id, metadata = mapOf(widgetKey to "calculator"))))
+        }
+        return apply(broker, broker.request(QuickTextCommand.Prepare(UUID.randomUUID().toString(), snapshot.revision, edits)), text)
     }
-    private suspend fun apply(prepared:QuickTextReply.Prepared):PluginOutcome {
-        val result=broker.request(QuickTextCommand.Commit(prepared.value.token))
-        if(result is QuickTextReply.Applied) {broker.request(QuickTextCommand.OpenUi(QuickUiTarget.MANAGE));return PluginOutcome.Message("快捷文本已更新")}
-        if(result is QuickTextReply.Failure&&result.code==QuickTextError.CONFIRMATION_REQUIRED)broker.request(QuickTextCommand.OpenUi(QuickUiTarget.REVIEW,prepared.value.token))
-        return message(result)
+
+    private suspend fun query(broker: QuickTextBroker) =
+        (broker.request(QuickTextCommand.Query(limit = 0)) as? QuickTextReply.Snapshot)?.value
+
+    private suspend fun apply(broker: QuickTextBroker, reply: QuickTextReply, text: (String) -> String): PluginOutcome {
+        if (reply !is QuickTextReply.Prepared) return message(reply, text)
+        val result = broker.request(QuickTextCommand.Commit(reply.value.token))
+        if (result is QuickTextReply.Applied) {
+            broker.request(QuickTextCommand.OpenUi(QuickUiTarget.MANAGE))
+            return PluginOutcome.Message(text("updated"))
+        }
+        if (result is QuickTextReply.Failure && result.code == QuickTextError.CONFIRMATION_REQUIRED) {
+            broker.request(QuickTextCommand.OpenUi(QuickUiTarget.REVIEW, reply.value.token))
+        }
+        return message(result, text)
     }
-    private fun message(reply:QuickTextReply)=PluginOutcome.Message((reply as? QuickTextReply.Failure)?.message ?: "操作已完成")
+
+    private fun message(reply: QuickTextReply, text: (String) -> String) = PluginOutcome.Message(
+        text(when ((reply as? QuickTextReply.Failure)?.code) {
+            QuickTextError.PERMISSION_DENIED -> "error.permission_denied"
+            QuickTextError.NOT_FOUND -> "error.not_found"
+            QuickTextError.INVALID -> "error.invalid"
+            QuickTextError.CONFLICT -> "error.conflict"
+            QuickTextError.BUSY -> "error.busy"
+            QuickTextError.CONFIRMATION_REQUIRED -> "error.confirm"
+            QuickTextError.HOST_UNAVAILABLE -> "error.host_unavailable"
+            QuickTextError.TOO_LARGE -> "error.too_large"
+            null -> "error.operation"
+        })
+    )
 }
